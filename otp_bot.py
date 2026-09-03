@@ -17,10 +17,10 @@ TELEGRAM_BOT_TOKEN = "8884098961:AAE1UxFAH60LQaUdnB6q3MKN2VHJ8mw84Q0"
 TELEGRAM_CHAT_ID = "-1004358010030"
 
 # আপনার INTS প্যানেলের API URL
-API_URL = "http://145.239.130.45/ints/agent/res/data_smscdr.php?fdate1=2026-09-02%2000:00:00&fdate2=2026-09-02%2023:59:59&frange=&fclient=&fnum=&fcli=&fgdata="
+API_URL = "http://145.239.130.45/ints/agent/res/data_smscdr.php?fdate1=2026-09-03%2000:00:00&fdate2=2026-09-03%2023:59:59&frange=&fclient=&fnum=&fcli=&fgdata="
 
-# ব্রাউজারের Network -> Headers -> Request Headers থেকে আপনার আসল Cookie বসান
-PANEL_COOKIE = "PHPSESSID=qpl9dcd5j83rmi0lfp9kufkiqg"
+# আপনার সরবরাহকৃত আপডেট করা কুকি
+PANEL_COOKIE = "PHPSESSID=ms355fnuahbptbtlt7ntncbbd9"
 # ==========================================================
 
 latest_stamp = None  
@@ -123,7 +123,6 @@ def send_telegram_message(text):
 def fetch_new_sms():
     global latest_stamp
     
-    # Direct Script Access বাইপাস করার জন্য সঠিক Headers
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "X-Requested-With": "XMLHttpRequest",
