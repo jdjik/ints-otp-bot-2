@@ -1,13 +1,17 @@
-import requests
-import time
-import re
-import threading
-import os
-import sys
-from flask import Flask
-from python_anticaptcha import AntiCaptchaTask, NoCaptchaTaskProxylessTask
-
-app = Flask('')
+def solve_recaptcha():
+    """Anti-Captcha API ব্যবহার করে ক্যাপচা সলভ করে g-recaptcha-response প্রদান করে"""
+    log_print("[*] Captcha Solving Started via Anti-Captcha...")
+    try:
+        client = AnticaptchaClient(ANTICAPTCHA_KEY)
+        task = NoCaptchaTaskProxylessTask(PANEL_LOGIN_URL, PANEL_SITEKEY)
+        job = client.create_task(task)
+        job.wait_for_result()
+        g_response = job.get_solution_response()
+        log_print("[+] Captcha Solved Successfully!")
+        return g_response
+    except Exception as e:
+        log_print(f"[-] Captcha Solving Failed: {e}")
+        return None
 
 @app.route('/')
 def home():
