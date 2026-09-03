@@ -16,11 +16,8 @@ def home():
 TELEGRAM_BOT_TOKEN = "8884098961:AAE1UxFAH60LQaUdnB6q3MKN2VHJ8mw84Q0"
 TELEGRAM_CHAT_ID = "-1004358010030"
 
-# আপনার INTS প্যানেলের API URL
-API_URL = "http://145.239.130.45/ints/agent/res/data_smscdr.php?fdate1=2026-09-03%2000:00:00&fdate2=2026-09-03%2023:59:59&frange=&fclient=&fnum=&fcli=&fgdata="
-
-# আপনার নতুন কুকি
-PANEL_COOKIE = "PHPSESSID=2t7juelurq03mepnethcv991jq"
+# আপনার কুকি
+PANEL_COOKIE = "PHPSESSID=ms355fnuahbptbtlt7ntncbbd9"
 # ==========================================================
 
 latest_stamp = None  
@@ -123,6 +120,17 @@ def send_telegram_message(text):
 def fetch_new_sms():
     global latest_stamp
     
+    # ডায়নামিক টাইমস্ট্যাম্প তৈরি
+    now_ms = int(time.time() * 1000)
+    
+    #DataTable এর আসল প্যারামিটার সহ URL
+    full_api_url = (
+        f"http://145.239.130.45/ints/agent/res/data_smscdr.php?"
+        f"sEcho=1&iColumns=8&sColumns=&iDisplayStart=0&iDisplayLength=10"
+        f"&fdate1=2026-09-03%2000:00:00&fdate2=2026-09-03%2023:59:59"
+        f"&frange=&fclient=&fnum=&fcli=&fgdata=&_={now_ms}"
+    )
+    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "X-Requested-With": "XMLHttpRequest",
@@ -134,7 +142,7 @@ def fetch_new_sms():
     }
     
     try:
-        response = requests.get(API_URL, headers=headers, timeout=15)
+        response = requests.get(full_api_url, headers=headers, timeout=15)
         if response.status_code == 200:
             try:
                 data = response.json()
@@ -142,9 +150,10 @@ def fetch_new_sms():
                 log_print("[!] JSON পার্স করা যায়নি। কুকি সেশন হয়তো এক্সপায়ার হয়ে গেছে।")
                 return
 
-            sms_list = data.get('aaData') or data.get('data') or data
+            sms_list = data.get('aaData') or data.get('data') or []
             
             if not isinstance(sms_list, list) or not sms_list:
+                log_print("[*] ডাটা পাওয়া গেছে কিন্তু কোনো নতুন এসএমএস নেই।")
                 return
 
             first_item = sms_list[0]
@@ -186,7 +195,7 @@ def fetch_new_sms():
                     
                     latest_stamp = current_stamp
         elif response.status_code == 503:
-            log_print("[!] Error 503: প্যানেলে ১৫ সেকেন্ডের কম সময়ে রিকোয়েস্ট পাঠানো হয়েছে।")
+            log_print("[!] Error 503: প্যানেলে ১৫ সেকেন্ডের কম সময়ে রিকোয়েস্ট পাঠানো হয়েছে অথবা সেশন ফ্রোজ হয়ে গেছে।")
         else:
             log_print(f"[!] API Response Error Code: {response.status_code}")
     except Exception as e:
@@ -195,7 +204,7 @@ def fetch_new_sms():
 def main_loop():
     while True:
         fetch_new_sms()
-        time.sleep(20)  # ১৫ সেকেন্ডের লিমিট বাইপাস করার জন্য ২০ সেকেন্ডের বিরতি
+        time.sleep(30)  # প্যানেলের রেট-লিমিটিং এড়াতে বিরতি ৩০ সেকেন্ডে উন্নীত করা হলো
 
 if __name__ == "__main__":
     t = threading.Thread(target=main_loop, daemon=True)
