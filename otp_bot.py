@@ -191,7 +191,7 @@ def fetch_new_sms():
 def main_loop():
     while True:
         fetch_new_sms()
-        time.sleep(5)
+        time.sleep(16)
 
 if __name__ == "__main__":
     t = threading.Thread(target=main_loop, daemon=True)
