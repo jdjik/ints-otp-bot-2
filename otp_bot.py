@@ -5,86 +5,26 @@ import threading
 import os
 import sys
 from flask import Flask
-from python_anticaptcha import AnticaptchaClient, NoCaptchaTaskProxylessTask
 
-# Flask App Initialization
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "INTS Panel Auto-Login & OTP Bot is Running 24/7!"
+    return "INTS Panel OTP Bot is Running (Free Version)!"
 
 # ==================== আপনার কনফিগারেশন ====================
 TELEGRAM_BOT_TOKEN = "8884098961:AAE1UxFAH60LQaUdnB6q3MKN2VHJ8mw84Q0"
 TELEGRAM_CHAT_ID = "-1004358010030"
 
-# INTS Panel Login Details
-PANEL_LOGIN_URL = "http://145.239.130.45/ints/login"  # প্যানেলের আসল লগইন URL দিন
-PANEL_USERNAME = "abdurRahim"                      # আপনার প্যানেল ইউজারনেম
-PANEL_PASSWORD = "Rahim@1424@"                      # আপনার প্যানেল পাসওয়ার্ড
-PANEL_SITEKEY = "6Lcfa1sUAAAAAKVPye-X6cftDCzFiF3BSHljWqNR"             # প্যানেল লগইন পেজের google sitekey
-
-# Anti-Captcha API Key
-ANTICAPTCHA_KEY = 377fb1c778cf04f2fb607024cae95ef9"
+# ব্রাউজার থেকে কপি করা PHPSESSID এখানে বসান
+PHPSESSID = "aqsvgb3gl9r6dcpthehml06q5i"
 # ==========================================================
 
-PANEL_COOKIE = ""
 latest_stamp = None
 
 def log_print(message):
     print(message)
     sys.stdout.flush()
-
-def solve_recaptcha():
-    """Anti-Captcha API ব্যবহার করে ক্যাপচা সলভ করে g-recaptcha-response প্রদান করে"""
-    log_print("[*] Captcha Solving Started via Anti-Captcha...")
-    try:
-        client = AnticaptchaClient(ANTICAPTCHA_KEY)
-        task = NoCaptchaTaskProxylessTask(PANEL_LOGIN_URL, PANEL_SITEKEY)
-        job = client.create_task(task)
-        job.wait_for_result()
-        g_response = job.get_solution_response()
-        log_print("[+] Captcha Solved Successfully!")
-        return g_response
-    except Exception as e:
-        log_print(f"[-] Captcha Solving Failed: {e}")
-        return None
-
-def auto_login():
-    """স্বয়ংক্রিয়ভাবে প্যানেলে লগইন করে নতুন PHPSESSID সংগ্রহ করে"""
-    global PANEL_COOKIE
-    log_print("[*] Attempting Automatic Panel Login...")
-    
-    g_recaptcha_response = solve_recaptcha()
-    if not g_recaptcha_response:
-        log_print("[-] Login Aborted: Captcha not solved.")
-        return False
-
-    session = requests.Session()
-    login_payload = {
-        "username": PANEL_USERNAME,
-        "password": PANEL_PASSWORD,
-        "g-recaptcha-response": g_recaptcha_response
-    }
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Referer": PANEL_LOGIN_URL
-    }
-
-    try:
-        res = session.post(PANEL_LOGIN_URL, data=login_payload, headers=headers, timeout=20)
-        cookies = session.cookies.get_dict()
-        if "PHPSESSID" in cookies:
-            PANEL_COOKIE = f"PHPSESSID={cookies['PHPSESSID']}"
-            log_print(f"[+] Auto-Login Successful! New Cookie: {PANEL_COOKIE}")
-            return True
-        else:
-            log_print("[-] Login failed or PHPSESSID not found in response.")
-            return False
-    except Exception as e:
-        log_print(f"[-] Login Error: {e}")
-        return False
 
 def mask_phone_number(phone):
     if not phone:
@@ -129,12 +69,8 @@ def send_telegram_message(text):
         log_print(f"[-] Telegram Error: {e}")
 
 def fetch_new_sms():
-    global latest_stamp, PANEL_COOKIE
+    global latest_stamp
     
-    if not PANEL_COOKIE:
-        if not auto_login():
-            return
-
     now_ms = int(time.time() * 1000)
     full_api_url = (
         f"http://145.239.130.45/ints/agent/res/data_smscdr.php?"
@@ -147,7 +83,7 @@ def fetch_new_sms():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "X-Requested-With": "XMLHttpRequest",
         "Referer": "http://145.239.130.45/ints/agent/SMSCDRReports",
-        "Cookie": PANEL_COOKIE,
+        "Cookie": f"PHPSESSID={PHPSESSID}",
         "Accept": "application/json, text/javascript, */*; q=0.01"
     }
     
@@ -157,9 +93,7 @@ def fetch_new_sms():
             try:
                 data = response.json()
             except Exception:
-                log_print("[!] JSON Parse Error. Cookie Expired! Re-logging...")
-                PANEL_COOKIE = ""
-                auto_login()
+                log_print("[!] Cookie Expired or Invalid! Please update PHPSESSID.")
                 return
 
             sms_list = data.get('aaData') or data.get('data') or []
