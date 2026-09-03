@@ -19,7 +19,7 @@ TELEGRAM_CHAT_ID = "-1004358010030"
 # আপনার INTS প্যানেলের API URL
 API_URL = "http://145.239.130.45/ints/agent/res/data_smscdr.php?fdate1=2026-09-03%2000:00:00&fdate2=2026-09-03%2023:59:59&frange=&fclient=&fnum=&fcli=&fgdata="
 
-# আপনার সরবরাহকৃত আপডেট করা কুকি
+# আপনার নতুন কুকি
 PANEL_COOKIE = "PHPSESSID=ms355fnuahbptbtlt7ntncbbd9"
 # ==========================================================
 
@@ -124,11 +124,13 @@ def fetch_new_sms():
     global latest_stamp
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "X-Requested-With": "XMLHttpRequest",
         "Referer": "http://145.239.130.45/ints/agent/SMSCDRReports",
         "Cookie": PANEL_COOKIE,
-        "Accept": "application/json, text/javascript, */*; q=0.01"
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive"
     }
     
     try:
@@ -183,6 +185,8 @@ def fetch_new_sms():
                     log_print(f"[+] ওটিপি Telegram-এ ফরোয়ার্ড করা হয়েছে! (Time: {current_stamp})")
                     
                     latest_stamp = current_stamp
+        elif response.status_code == 503:
+            log_print("[!] Error 503: প্যানেলে ১৫ সেকেন্ডের কম সময়ে রিকোয়েস্ট পাঠানো হয়েছে।")
         else:
             log_print(f"[!] API Response Error Code: {response.status_code}")
     except Exception as e:
@@ -191,7 +195,7 @@ def fetch_new_sms():
 def main_loop():
     while True:
         fetch_new_sms()
-        time.sleep(16)
+        time.sleep(20)  # ১৫ সেকেন্ডের লিমিট বাইপাস করার জন্য ২০ সেকেন্ডের বিরতি
 
 if __name__ == "__main__":
     t = threading.Thread(target=main_loop, daemon=True)
