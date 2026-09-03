@@ -20,7 +20,7 @@ TELEGRAM_CHAT_ID = "-1004358010030"
 API_URL = "http://145.239.130.45/ints/agent/res/data_smscdr.php?fdate1=2026-09-03%2000:00:00&fdate2=2026-09-03%2023:59:59&frange=&fclient=&fnum=&fcli=&fgdata="
 
 # আপনার নতুন কুকি
-PANEL_COOKIE = "PHPSESSID=ms355fnuahbptbtlt7ntncbbd9"
+PANEL_COOKIE = "PHPSESSID=2t7juelurq03mepnethcv991jq"
 # ==========================================================
 
 latest_stamp = None  
