@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: ints-otp-bot-2
+    env: python
+    buildCommand: "pip install -r requirements.txt && playwright install chromium --with-deps"
+    startCommand: "python otp_bot.py"
