@@ -148,7 +148,7 @@ def fetch_new_sms():
 def main_loop():
     while True:
         fetch_new_sms()
-        time.sleep(30)
+        time.sleep(60)  # ৩০ সেকেন্ড থেকে বাড়িয়ে ৬০ সেকেন্ড করা হলো
 
 if __name__ == "__main__":
     t = threading.Thread(target=main_loop, daemon=True)
