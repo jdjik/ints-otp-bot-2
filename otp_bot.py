@@ -11,15 +11,14 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "INTS Panel Auto-Session OTP Bot is Running 24/7!"
+    return "INTS Panel OTP Bot Status: Active and Running 24/7!"
 
 # ==================== আপনার কনফিগারেশন ====================
 TELEGRAM_BOT_TOKEN = "8884098961:AAE1UxFAH60LQaUdnB6q3MKN2VHJ8mw84Q0"
 TELEGRAM_CHAT_ID = "-1004358010030"
 
-PANEL_BASE_URL = "http://145.239.130.45/ints"
-PANEL_USERNAME = "abdurRahim"  # আপনার প্যানেল ইউজারনেম
-PANEL_PASSWORD = "Rahim@1424@"  # আপনার প্যানেল পাসওয়ার্ড
+# ব্রাউজারে প্যানেল লগইন করার পর Inspect > Application > Cookies থেকে PHPSESSID বসাবেন
+PANEL_PHPSESSID = "2ef5l4ah897pgidd9mndaf20q2" 
 # ==========================================================
 
 session = requests.Session()
@@ -28,37 +27,6 @@ latest_stamp = None
 def log_print(message):
     print(message)
     sys.stdout.flush()
-
-def login_to_panel():
-    global session
-    session = requests.Session()  # নতুন সেশন তৈরি করা
-    login_url = f"{PANEL_BASE_URL}/login"
-    login_action_url = f"{PANEL_BASE_URL}/agent/login_check"
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Origin": "http://145.239.130.45",
-        "Referer": login_url
-    }
-    
-    payload = {
-        "_username": PANEL_USERNAME,
-        "username": PANEL_USERNAME,
-        "_password": PANEL_PASSWORD,
-        "password": PANEL_PASSWORD,
-        "login": "Login"
-    }
-    
-    try:
-        log_print("[*] Attempting HTTP Session Auto-Login...")
-        session.get(login_url, headers=headers, timeout=15)
-        res = session.post(login_action_url, data=payload, headers=headers, timeout=15)
-        log_print("[+] Session Auto-Login Completed.")
-        return True
-    except Exception as e:
-        log_print(f"[-] Login Exception: {e}")
-        return False
 
 def mask_phone_number(phone):
     if not phone:
@@ -109,9 +77,10 @@ def fetch_new_sms():
     today_str = datetime.now().strftime("%Y-%m-%d")
     now_ms = int(time.time() * 1000)
     
+    # ডেট এবং অন্যান্য ফিল্টার সহ সঠিক API রিকোয়েস্ট ইউআরএল
     full_api_url = (
         f"http://145.239.130.45/ints/agent/res/data_smscdr.php?"
-        f"sEcho=1&iColumns=8&sColumns=&iDisplayStart=0&iDisplayLength=10"
+        f"sEcho=1&iColumns=8&sColumns=&iDisplayStart=0&iDisplayLength=15"
         f"&fdate1={today_str}%2000:00:00&fdate2={today_str}%2023:59:59"
         f"&frange=&fclient=&fnum=&fcli=&fgdata=&_={now_ms}"
     )
@@ -120,50 +89,60 @@ def fetch_new_sms():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "X-Requested-With": "XMLHttpRequest",
         "Referer": "http://145.239.130.45/ints/agent/SMSCDRReports",
-        "Accept": "application/json, text/javascript, */*; q=0.01"
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Cookie": f"PHPSESSID={PANEL_PHPSESSID}"
     }
     
     try:
         response = session.get(full_api_url, headers=headers, timeout=15)
         
-        # যদি রেসপন্স JSON না হয় বা রিডাইরেক্ট করে লগইন পেজে পাঠায়
-        if "<html" in response.text.lower() or "login" in response.url.lower():
-            log_print("[!] Session Expired or Redirected. Re-authenticating...")
-            login_to_panel()
+        # যদি সেশন এক্সপায়ার হয়ে যায় বা HTML পেজ রিটার্ন করে
+        if "<html" in response.text.lower() or response.status_code != 200:
+            log_print("[!] Session Expired or Invalid Cookie! Please update PANEL_PHPSESSID.")
             return
 
         try:
             data = response.json()
         except Exception as e:
-            log_print(f"[!] JSON Parsing Failed: {e}")
+            log_print(f"[!] JSON Decode Error: {e} | Response text snippet: {response.text[:100]}")
             return
 
-        sms_list = data.get('aaData') or data.get('data') or []
+        # ডাটা লিস্ট বের করার জন্য মাল্টিপল অপশন
+        sms_list = data.get('aaData') or data.get('data') or data.get('rows') or []
         if not isinstance(sms_list, list) or not sms_list:
-            log_print("[*] Checking for new SMS... (No new SMS found)")
+            log_print("[*] Panel active. No SMS found in the response right now.")
             return
 
+        # প্রথম আইটেমের ইউনিক স্ট্যাম্প বা আইডি বের করা
         first_item = sms_list[0]
-        first_stamp = first_item[0] if isinstance(first_item, list) else first_item.get('start_stamp')
+        if isinstance(first_item, list):
+            first_stamp = first_item[0]
+        elif isinstance(first_item, dict):
+            first_stamp = first_item.get('start_stamp') or first_item.get('id') or str(first_item)
+        else:
+            first_stamp = str(first_item)
 
         if latest_stamp is None:
             latest_stamp = first_stamp
-            log_print(f"[*] Connected successfully! Current stamp: {latest_stamp}")
+            log_print(f"[*] Bot Connected Successfully! Initial Stamp Set: {latest_stamp}")
             return
 
+        # নতুন এসএমএস চেক করা
         for sms in reversed(sms_list):
             if isinstance(sms, list):
                 current_stamp = sms[0]
-                source = sms[2] if len(sms) > 2 else "TELEGRAM"
+                source = sms[2] if len(sms) > 2 else "UNKNOWN"
                 receiver = sms[3] if len(sms) > 3 else ""
                 message = sms[4] if len(sms) > 4 else ""
+            elif isinstance(sms, dict):
+                current_stamp = sms.get('start_stamp') or sms.get('id')
+                message = sms.get('short_message') or sms.get('message') or ""
+                receiver = sms.get('destination_addr') or sms.get('number') or ""
+                source = sms.get('source_addr') or sms.get('service') or "UNKNOWN"
             else:
-                current_stamp = sms.get('start_stamp')
-                message = sms.get('short_message') or ""
-                receiver = sms.get('destination_addr') or ""
-                source = sms.get('source_addr') or "TELEGRAM"
+                continue
 
-            if current_stamp and current_stamp > latest_stamp:
+            if current_stamp and str(current_stamp) > str(latest_stamp):
                 otp_code = extract_otp(message)
                 country_name, country_flag = get_global_country(receiver)
                 masked_number = mask_phone_number(receiver)
@@ -178,17 +157,16 @@ def fetch_new_sms():
                     f"💬 **SMS Text:**\n`{message}`"
                 )
                 send_telegram_message(alert_text)
-                log_print(f"[+] OTP Sent to Telegram! Stamp: {current_stamp}")
+                log_print(f"[+] OTP Forwarded to Telegram! Stamp: {current_stamp}")
                 latest_stamp = current_stamp
 
     except Exception as e:
-        log_print(f"[-] Connection Exception: {e}")
+        log_print(f"[-] Connection Error: {e}")
 
 def main_loop():
-    login_to_panel()
     while True:
         fetch_new_sms()
-        time.sleep(20)
+        time.sleep(10)  # প্রতি ১০ সেকেন্ড পর পর চেক করবে
 
 if __name__ == "__main__":
     t = threading.Thread(target=main_loop, daemon=True)
