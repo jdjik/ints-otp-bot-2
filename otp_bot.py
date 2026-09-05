@@ -5,67 +5,54 @@ import threading
 import os
 import sys
 from flask import Flask
-from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "INTS Panel Fully Automated Playwright OTP Bot is Running!"
+    return "INTS Panel Auto-Session OTP Bot is Running 24/7!"
 
 # ==================== আপনার কনফিগারেশন ====================
 TELEGRAM_BOT_TOKEN = "8884098961:AAE1UxFAH60LQaUdnB6q3MKN2VHJ8mw84Q0"
 TELEGRAM_CHAT_ID = "-1004358010030"
 
 # প্যানেল লগইন তথ্য
-PANEL_LOGIN_URL = "http://145.239.130.45/ints/login"  # প্যানেল লগইন পেজের লিংক
-PANEL_USERNAME = "abdurRahim"                 # আপনার প্যানেল ইউজারনেম
-PANEL_PASSWORD = "Rahim@1424@"                 # আপনার প্যানেল পাসওয়ার্ড
+PANEL_BASE_URL = "http://145.239.130.45/ints"
+PANEL_USERNAME = "abdurRahim"  # আপনার আসল ইউজারনেম দিন
+PANEL_PASSWORD = "Rahim@1424@"  # আপনার আসল পাসওয়ার্ড দিন
 # ==========================================================
 
-ACTIVE_PHPSESSID = None
+session = requests.Session()
 latest_stamp = None
 
 def log_print(message):
     print(message)
     sys.stdout.flush()
 
-def auto_login_with_playwright():
-    """Playwright দিয়ে হেডলেস ব্রাউজারে প্যানেলে অটো-লগইন করে PHPSESSID সংগ্রহ করা"""
-    global ACTIVE_PHPSESSID
-    log_print("[*] Launching Automated Browser for Panel Login...")
+def login_to_panel():
+    global session
+    login_url = f"{PANEL_BASE_URL}/login"
+    login_action_url = f"{PANEL_BASE_URL}/agent/login_check"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Referer": login_url
+    }
+    
+    payload = {
+        "username": PANEL_USERNAME,
+        "password": PANEL_PASSWORD,
+        "login": "Login"
+    }
+    
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-            page = context.new_page()
-
-            log_print("[*] Navigating to Login Page...")
-            page.goto(PANEL_LOGIN_URL, timeout=60000)
-
-            # ফর্ম ফিলআপ
-            log_print("[*] Entering Credentials...")
-            page.fill('input[name="username"]', PANEL_USERNAME)
-            page.fill('input[name="password"]', PANEL_PASSWORD)
-
-            # লগইন সাবমিট
-            page.click('button[type="submit"], input[type="submit"]')
-            page.wait_for_timeout(5000)
-
-            # কুকি এক্সট্র্যাক্ট
-            cookies = context.cookies()
-            for cookie in cookies:
-                if cookie['name'] == 'PHPSESSID':
-                    ACTIVE_PHPSESSID = cookie['value']
-                    log_print(f"[+] Playwright Auto-Login Successful! PHPSESSID: {ACTIVE_PHPSESSID}")
-                    browser.close()
-                    return True
-
-            log_print("[-] PHPSESSID not found after login submit.")
-            browser.close()
-            return False
+        log_print("[*] Attempting HTTP Session Auto-Login...")
+        session.get(login_url, headers=headers, timeout=15)
+        res = session.post(login_action_url, data=payload, headers=headers, timeout=15)
+        log_print("[+] Session Auto-Login Completed.")
+        return True
     except Exception as e:
-        log_print(f"[-] Playwright Automation Error: {e}")
+        log_print(f"[-] Login Exception: {e}")
         return False
 
 def mask_phone_number(phone):
@@ -111,12 +98,8 @@ def send_telegram_message(text):
         log_print(f"[-] Telegram Error: {e}")
 
 def fetch_new_sms():
-    global latest_stamp, ACTIVE_PHPSESSID
+    global latest_stamp, session
     
-    if not ACTIVE_PHPSESSID:
-        if not auto_login_with_playwright():
-            return
-
     now_ms = int(time.time() * 1000)
     full_api_url = (
         f"http://145.239.130.45/ints/agent/res/data_smscdr.php?"
@@ -129,23 +112,22 @@ def fetch_new_sms():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "X-Requested-With": "XMLHttpRequest",
         "Referer": "http://145.239.130.45/ints/agent/SMSCDRReports",
-        "Cookie": f"PHPSESSID={ACTIVE_PHPSESSID}",
         "Accept": "application/json, text/javascript, */*; q=0.01"
     }
     
     try:
-        response = requests.get(full_api_url, headers=headers, timeout=15)
+        response = session.get(full_api_url, headers=headers, timeout=15)
         if response.status_code == 200:
             try:
                 data = response.json()
             except Exception:
-                log_print("[!] Session Expired! Triggering Playwright Re-login...")
-                ACTIVE_PHPSESSID = None
+                log_print("[!] Session Expired. Re-authenticating...")
+                login_to_panel()
                 return
 
             sms_list = data.get('aaData') or data.get('data') or []
             if not isinstance(sms_list, list) or not sms_list:
-                log_print("[*] Connected. No new SMS.")
+                log_print("[*] Checking for new SMS...")
                 return
 
             first_item = sms_list[0]
@@ -153,7 +135,7 @@ def fetch_new_sms():
 
             if latest_stamp is None:
                 latest_stamp = first_stamp
-                log_print(f"[*] INTS API Connected! Initial stamp: {latest_stamp}")
+                log_print(f"[*] INTS Connected! Initial stamp: {latest_stamp}")
                 return
 
             for sms in reversed(sms_list):
@@ -183,16 +165,15 @@ def fetch_new_sms():
                         f"💬 **SMS Text:**\n`{message}`"
                     )
                     send_telegram_message(alert_text)
-                    log_print(f"[+] OTP Forwarded to Telegram! (Time: {current_stamp})")
+                    log_print(f"[+] OTP Forwarded to Telegram!")
                     latest_stamp = current_stamp
-        elif response.status_code == 503:
-            log_print("[!] Error 503: Rate limited.")
         else:
-            log_print(f"[!] API Error Code: {response.status_code}")
+            log_print(f"[!] Server HTTP Response: {response.status_code}")
     except Exception as e:
-        log_print(f"[-] API Connection Error: {e}")
+        log_print(f"[-] Connection Error: {e}")
 
 def main_loop():
+    login_to_panel()
     while True:
         fetch_new_sms()
         time.sleep(60)
