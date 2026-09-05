@@ -10,14 +10,14 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "INTS Panel OTP Bot is Running (Free Version)!"
+    return "INTS Panel API-Based OTP Bot is Running 24/7!"
 
 # ==================== আপনার কনফিগারেশন ====================
 TELEGRAM_BOT_TOKEN = "8884098961:AAE1UxFAH60LQaUdnB6q3MKN2VHJ8mw84Q0"
 TELEGRAM_CHAT_ID = "-1004358010030"
 
-# ব্রাউজার থেকে কপি করা PHPSESSID এখানে বসান
-PHPSESSID = "aqsvgb3gl9r6dcpthehml06q5i"
+# আপনার দেওয়া API Token
+PANEL_API_TOKEN = "coCDhoNwgHl6i0pGRlVP"
 # ==========================================================
 
 latest_stamp = None
@@ -72,18 +72,20 @@ def fetch_new_sms():
     global latest_stamp
     
     now_ms = int(time.time() * 1000)
+    
+    # URL ও Header দুটোতেই API Token পাঠানো হচ্ছে
     full_api_url = (
         f"http://145.239.130.45/ints/agent/res/data_smscdr.php?"
-        f"sEcho=1&iColumns=8&sColumns=&iDisplayStart=0&iDisplayLength=10"
+        f"token={PANEL_API_TOKEN}&api_key={PANEL_API_TOKEN}"
+        f"&sEcho=1&iColumns=8&sColumns=&iDisplayStart=0&iDisplayLength=10"
         f"&fdate1=2026-09-03%2000:00:00&fdate2=2026-09-03%2023:59:59"
         f"&frange=&fclient=&fnum=&fcli=&fgdata=&_={now_ms}"
     )
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": "http://145.239.130.45/ints/agent/SMSCDRReports",
-        "Cookie": f"PHPSESSID={PHPSESSID}",
+        "Authorization": f"Bearer {PANEL_API_TOKEN}",
+        "X-API-KEY": PANEL_API_TOKEN,
         "Accept": "application/json, text/javascript, */*; q=0.01"
     }
     
@@ -93,12 +95,12 @@ def fetch_new_sms():
             try:
                 data = response.json()
             except Exception:
-                log_print("[!] Cookie Expired or Invalid! Please update PHPSESSID.")
+                log_print("[!] Response Error: Output is not JSON. API Key placement issue?")
                 return
 
             sms_list = data.get('aaData') or data.get('data') or []
             if not isinstance(sms_list, list) or not sms_list:
-                log_print("[*] Connected. No new SMS.")
+                log_print("[*] API Connected! No new SMS found.")
                 return
 
             first_item = sms_list[0]
@@ -106,7 +108,7 @@ def fetch_new_sms():
 
             if latest_stamp is None:
                 latest_stamp = first_stamp
-                log_print(f"[*] INTS API Connected! Initial stamp: {latest_stamp}")
+                log_print(f"[*] INTS API Connected via Token! Initial stamp: {latest_stamp}")
                 return
 
             for sms in reversed(sms_list):
@@ -139,16 +141,16 @@ def fetch_new_sms():
                     log_print(f"[+] OTP Forwarded to Telegram! (Time: {current_stamp})")
                     latest_stamp = current_stamp
         elif response.status_code == 503:
-            log_print("[!] Error 503: Rate limited.")
+            log_print("[!] Error 503: Rate limited by panel.")
         else:
-            log_print(f"[!] API Error Code: {response.status_code}")
+            log_print(f"[!] API Response Code: {response.status_code}")
     except Exception as e:
-        log_print(f"[-] API Connection Error: {e}")
+        log_print(f"[-] Connection Exception: {e}")
 
 def main_loop():
     while True:
         fetch_new_sms()
-        time.sleep(60)  # ৩০ সেকেন্ড থেকে বাড়িয়ে ৬০ সেকেন্ড করা হলো
+        time.sleep(60)
 
 if __name__ == "__main__":
     t = threading.Thread(target=main_loop, daemon=True)
