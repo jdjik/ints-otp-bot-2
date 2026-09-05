@@ -17,10 +17,9 @@ def home():
 TELEGRAM_BOT_TOKEN = "8884098961:AAE1UxFAH60LQaUdnB6q3MKN2VHJ8mw84Q0"
 TELEGRAM_CHAT_ID = "-1004358010030"
 
-# প্যানেল লগইন তথ্য (সঠিক ইউজারনেম ও পাসওয়ার্ড দিন)
 PANEL_BASE_URL = "http://145.239.130.45/ints"
-PANEL_USERNAME = "abdurRahim" 
-PANEL_PASSWORD = "Rahim@1424@"
+PANEL_USERNAME = "abdurRahim"  # আপনার প্যানেল ইউজারনেম
+PANEL_PASSWORD = "Rahim@1424@"  # আপনার প্যানেল পাসওয়ার্ড
 # ==========================================================
 
 session = requests.Session()
@@ -32,16 +31,21 @@ def log_print(message):
 
 def login_to_panel():
     global session
+    session = requests.Session()  # নতুন সেশন তৈরি করা
     login_url = f"{PANEL_BASE_URL}/login"
     login_action_url = f"{PANEL_BASE_URL}/agent/login_check"
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Origin": "http://145.239.130.45",
         "Referer": login_url
     }
     
     payload = {
+        "_username": PANEL_USERNAME,
         "username": PANEL_USERNAME,
+        "_password": PANEL_PASSWORD,
         "password": PANEL_PASSWORD,
         "login": "Login"
     }
@@ -95,7 +99,7 @@ def send_telegram_message(text):
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"}
     try:
         res = requests.post(telegram_url, json=payload, timeout=10)
-        log_print(f"[*] Telegram Response Status: {res.status_code}")
+        log_print(f"[*] Telegram Send Status: {res.status_code}")
     except Exception as e:
         log_print(f"[-] Telegram Error: {e}")
 
@@ -105,7 +109,6 @@ def fetch_new_sms():
     today_str = datetime.now().strftime("%Y-%m-%d")
     now_ms = int(time.time() * 1000)
     
-    # আজকের তারিখ দিয়ে ডায়নামিক API URL
     full_api_url = (
         f"http://145.239.130.45/ints/agent/res/data_smscdr.php?"
         f"sEcho=1&iColumns=8&sColumns=&iDisplayStart=0&iDisplayLength=10"
@@ -114,7 +117,7 @@ def fetch_new_sms():
     )
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "X-Requested-With": "XMLHttpRequest",
         "Referer": "http://145.239.130.45/ints/agent/SMSCDRReports",
         "Accept": "application/json, text/javascript, */*; q=0.01"
@@ -122,59 +125,62 @@ def fetch_new_sms():
     
     try:
         response = session.get(full_api_url, headers=headers, timeout=15)
-        if response.status_code == 200:
-            try:
-                data = response.json()
-            except Exception:
-                log_print("[!] Session Expired or HTML response returned. Re-authenticating...")
-                login_to_panel()
-                return
+        
+        # যদি রেসপন্স JSON না হয় বা রিডাইরেক্ট করে লগইন পেজে পাঠায়
+        if "<html" in response.text.lower() or "login" in response.url.lower():
+            log_print("[!] Session Expired or Redirected. Re-authenticating...")
+            login_to_panel()
+            return
 
-            sms_list = data.get('aaData') or data.get('data') or []
-            if not isinstance(sms_list, list) or not sms_list:
-                log_print("[*] Checking for new SMS... (No new SMS found yet)")
-                return
+        try:
+            data = response.json()
+        except Exception as e:
+            log_print(f"[!] JSON Parsing Failed: {e}")
+            return
 
-            first_item = sms_list[0]
-            first_stamp = first_item[0] if isinstance(first_item, list) else first_item.get('start_stamp')
+        sms_list = data.get('aaData') or data.get('data') or []
+        if not isinstance(sms_list, list) or not sms_list:
+            log_print("[*] Checking for new SMS... (No new SMS found)")
+            return
 
-            # প্রথমবার কানেক্ট হলে Stamp সেট করে রাখবে
-            if latest_stamp is None:
-                latest_stamp = first_stamp
-                log_print(f"[*] INTS Connected! Current latest stamp: {latest_stamp}")
-                return
+        first_item = sms_list[0]
+        first_stamp = first_item[0] if isinstance(first_item, list) else first_item.get('start_stamp')
 
-            for sms in reversed(sms_list):
-                if isinstance(sms, list):
-                    current_stamp = sms[0]
-                    source = sms[2] if len(sms) > 2 else "TELEGRAM"
-                    receiver = sms[3] if len(sms) > 3 else ""
-                    message = sms[4] if len(sms) > 4 else ""
-                else:
-                    current_stamp = sms.get('start_stamp')
-                    message = sms.get('short_message') or ""
-                    receiver = sms.get('destination_addr') or ""
-                    source = sms.get('source_addr') or "TELEGRAM"
+        if latest_stamp is None:
+            latest_stamp = first_stamp
+            log_print(f"[*] Connected successfully! Current stamp: {latest_stamp}")
+            return
 
-                if current_stamp and current_stamp > latest_stamp:
-                    otp_code = extract_otp(message)
-                    country_name, country_flag = get_global_country(receiver)
-                    masked_number = mask_phone_number(receiver)
-                    service_name = str(source).upper() if "Unknown" not in str(source) else "TELEGRAM"
-                    
-                    alert_text = (
-                        f"🚨 **NEW OTP RECEIVED** 🚨\n\n"
-                        f"◁ **NUMBER:** `{masked_number}`\n"
-                        f"◁ **OTP:** `{otp_code}`\n"
-                        f"◁ **SERVICE:** {service_name}\n"
-                        f"◁ **LOCATION:** {country_name} {country_flag}\n\n"
-                        f"💬 **SMS Text:**\n`{message}`"
-                    )
-                    send_telegram_message(alert_text)
-                    log_print(f"[+] OTP Forwarded to Telegram! (Stamp: {current_stamp})")
-                    latest_stamp = current_stamp
-        else:
-            log_print(f"[!] Server Response Code: {response.status_code}")
+        for sms in reversed(sms_list):
+            if isinstance(sms, list):
+                current_stamp = sms[0]
+                source = sms[2] if len(sms) > 2 else "TELEGRAM"
+                receiver = sms[3] if len(sms) > 3 else ""
+                message = sms[4] if len(sms) > 4 else ""
+            else:
+                current_stamp = sms.get('start_stamp')
+                message = sms.get('short_message') or ""
+                receiver = sms.get('destination_addr') or ""
+                source = sms.get('source_addr') or "TELEGRAM"
+
+            if current_stamp and current_stamp > latest_stamp:
+                otp_code = extract_otp(message)
+                country_name, country_flag = get_global_country(receiver)
+                masked_number = mask_phone_number(receiver)
+                service_name = str(source).upper() if "Unknown" not in str(source) else "TELEGRAM"
+                
+                alert_text = (
+                    f"🚨 **NEW OTP RECEIVED** 🚨\n\n"
+                    f"◁ **NUMBER:** `{masked_number}`\n"
+                    f"◁ **OTP:** `{otp_code}`\n"
+                    f"◁ **SERVICE:** {service_name}\n"
+                    f"◁ **LOCATION:** {country_name} {country_flag}\n\n"
+                    f"💬 **SMS Text:**\n`{message}`"
+                )
+                send_telegram_message(alert_text)
+                log_print(f"[+] OTP Sent to Telegram! Stamp: {current_stamp}")
+                latest_stamp = current_stamp
+
     except Exception as e:
         log_print(f"[-] Connection Exception: {e}")
 
@@ -182,7 +188,7 @@ def main_loop():
     login_to_panel()
     while True:
         fetch_new_sms()
-        time.sleep(20) # প্রতি ২০ সেকেন্ড পর পর চেক করবে
+        time.sleep(20)
 
 if __name__ == "__main__":
     t = threading.Thread(target=main_loop, daemon=True)
