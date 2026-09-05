@@ -17,7 +17,7 @@ def home():
 TELEGRAM_BOT_TOKEN = "8884098961:AAE1UxFAH60LQaUdnB6q3MKN2VHJ8mw84Q0"
 TELEGRAM_CHAT_ID = "-1004358010030"
 
-# ব্রাউজারে প্যানেল লগইন করার পর Inspect > Application > Cookies থেকে PHPSESSID বসাবেন
+# ⚠️ ব্রাউজারে প্যানেল লগইন করার পর Inspect > Application > Cookies থেকে নতুন PHPSESSID বসাবেন
 PANEL_PHPSESSID = "2ef5l4ah897pgidd9mndaf20q2" 
 # ==========================================================
 
@@ -77,10 +77,9 @@ def fetch_new_sms():
     today_str = datetime.now().strftime("%Y-%m-%d")
     now_ms = int(time.time() * 1000)
     
-    # ডেট এবং অন্যান্য ফিল্টার সহ সঠিক API রিকোয়েস্ট ইউআরএল
     full_api_url = (
         f"http://145.239.130.45/ints/agent/res/data_smscdr.php?"
-        f"sEcho=1&iColumns=8&sColumns=&iDisplayStart=0&iDisplayLength=15"
+        f"sEcho=1&iColumns=8&sColumns=&iDisplayStart=0&iDisplayLength=10"
         f"&fdate1={today_str}%2000:00:00&fdate2={today_str}%2023:59:59"
         f"&frange=&fclient=&fnum=&fcli=&fgdata=&_={now_ms}"
     )
@@ -96,7 +95,6 @@ def fetch_new_sms():
     try:
         response = session.get(full_api_url, headers=headers, timeout=15)
         
-        # যদি সেশন এক্সপায়ার হয়ে যায় বা HTML পেজ রিটার্ন করে
         if "<html" in response.text.lower() or response.status_code != 200:
             log_print("[!] Session Expired or Invalid Cookie! Please update PANEL_PHPSESSID.")
             return
@@ -104,41 +102,44 @@ def fetch_new_sms():
         try:
             data = response.json()
         except Exception as e:
-            log_print(f"[!] JSON Decode Error: {e} | Response text snippet: {response.text[:100]}")
+            log_print(f"[!] JSON Error: {e}")
             return
 
-        # ডাটা লিস্ট বের করার জন্য মাল্টিপল অপশন
-        sms_list = data.get('aaData') or data.get('data') or data.get('rows') or []
+        sms_list = data.get('aaData') or data.get('data') or []
         if not isinstance(sms_list, list) or not sms_list:
-            log_print("[*] Panel active. No SMS found in the response right now.")
+            log_print("[*] Monitoring panel... (No SMS found right now)")
             return
 
-        # প্রথম আইটেমের ইউনিক স্ট্যাম্প বা আইডি বের করা
-        first_item = sms_list[0]
-        if isinstance(first_item, list):
-            first_stamp = first_item[0]
-        elif isinstance(first_item, dict):
-            first_stamp = first_item.get('start_stamp') or first_item.get('id') or str(first_item)
-        else:
-            first_stamp = str(first_item)
+        # ফিল্টার: প্যানেলের ওয়ার্নিং মেসেজ এড়ানো
+        valid_sms_list = []
+        for sms in sms_list:
+            sms_str = str(sms)
+            if "Refresh must be done" not in sms_str and "atleast 15 second" not in sms_str:
+                valid_sms_list.append(sms)
+
+        if not valid_sms_list:
+            log_print("[*] Rate limit warning skipped. Retrying next cycle...")
+            return
+
+        first_item = valid_sms_list[0]
+        first_stamp = first_item[0] if isinstance(first_item, list) else first_item.get('start_stamp')
 
         if latest_stamp is None:
             latest_stamp = first_stamp
             log_print(f"[*] Bot Connected Successfully! Initial Stamp Set: {latest_stamp}")
             return
 
-        # নতুন এসএমএস চেক করা
-        for sms in reversed(sms_list):
+        for sms in reversed(valid_sms_list):
             if isinstance(sms, list):
                 current_stamp = sms[0]
                 source = sms[2] if len(sms) > 2 else "UNKNOWN"
                 receiver = sms[3] if len(sms) > 3 else ""
                 message = sms[4] if len(sms) > 4 else ""
             elif isinstance(sms, dict):
-                current_stamp = sms.get('start_stamp') or sms.get('id')
-                message = sms.get('short_message') or sms.get('message') or ""
-                receiver = sms.get('destination_addr') or sms.get('number') or ""
-                source = sms.get('source_addr') or sms.get('service') or "UNKNOWN"
+                current_stamp = sms.get('start_stamp')
+                message = sms.get('short_message') or ""
+                receiver = sms.get('destination_addr') or ""
+                source = sms.get('source_addr') or "UNKNOWN"
             else:
                 continue
 
@@ -166,7 +167,8 @@ def fetch_new_sms():
 def main_loop():
     while True:
         fetch_new_sms()
-        time.sleep(10)  # প্রতি ১০ সেকেন্ড পর পর চেক করবে
+        # প্যানেলের রিফ্রেশ লিমিট ১৫ সেকেন্ড, তাই নিরাপত্তা নিশ্চিত করতে আমরা ২৫ সেকেন্ড পরপর রিকোয়েস্ট পাঠাব
+        time.sleep(25)
 
 if __name__ == "__main__":
     t = threading.Thread(target=main_loop, daemon=True)
