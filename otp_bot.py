@@ -4,6 +4,7 @@ import re
 import threading
 import os
 import sys
+from datetime import datetime
 from flask import Flask
 
 app = Flask(__name__)
@@ -16,10 +17,10 @@ def home():
 TELEGRAM_BOT_TOKEN = "8884098961:AAE1UxFAH60LQaUdnB6q3MKN2VHJ8mw84Q0"
 TELEGRAM_CHAT_ID = "-1004358010030"
 
-# প্যানেল লগইন তথ্য
+# প্যানেল লগইন তথ্য (সঠিক ইউজারনেম ও পাসওয়ার্ড দিন)
 PANEL_BASE_URL = "http://145.239.130.45/ints"
-PANEL_USERNAME = "abdurRahim"  # আপনার আসল ইউজারনেম দিন
-PANEL_PASSWORD = "Rahim@1424@"  # আপনার আসল পাসওয়ার্ড দিন
+PANEL_USERNAME = "abdurRahim" 
+PANEL_PASSWORD = "Rahim@1424@"
 # ==========================================================
 
 session = requests.Session()
@@ -93,18 +94,22 @@ def send_telegram_message(text):
     telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"}
     try:
-        requests.post(telegram_url, json=payload, timeout=10)
+        res = requests.post(telegram_url, json=payload, timeout=10)
+        log_print(f"[*] Telegram Response Status: {res.status_code}")
     except Exception as e:
         log_print(f"[-] Telegram Error: {e}")
 
 def fetch_new_sms():
     global latest_stamp, session
     
+    today_str = datetime.now().strftime("%Y-%m-%d")
     now_ms = int(time.time() * 1000)
+    
+    # আজকের তারিখ দিয়ে ডায়নামিক API URL
     full_api_url = (
         f"http://145.239.130.45/ints/agent/res/data_smscdr.php?"
         f"sEcho=1&iColumns=8&sColumns=&iDisplayStart=0&iDisplayLength=10"
-        f"&fdate1=2026-09-03%2000:00:00&fdate2=2026-09-03%2023:59:59"
+        f"&fdate1={today_str}%2000:00:00&fdate2={today_str}%2023:59:59"
         f"&frange=&fclient=&fnum=&fcli=&fgdata=&_={now_ms}"
     )
     
@@ -121,21 +126,22 @@ def fetch_new_sms():
             try:
                 data = response.json()
             except Exception:
-                log_print("[!] Session Expired. Re-authenticating...")
+                log_print("[!] Session Expired or HTML response returned. Re-authenticating...")
                 login_to_panel()
                 return
 
             sms_list = data.get('aaData') or data.get('data') or []
             if not isinstance(sms_list, list) or not sms_list:
-                log_print("[*] Checking for new SMS...")
+                log_print("[*] Checking for new SMS... (No new SMS found yet)")
                 return
 
             first_item = sms_list[0]
             first_stamp = first_item[0] if isinstance(first_item, list) else first_item.get('start_stamp')
 
+            # প্রথমবার কানেক্ট হলে Stamp সেট করে রাখবে
             if latest_stamp is None:
                 latest_stamp = first_stamp
-                log_print(f"[*] INTS Connected! Initial stamp: {latest_stamp}")
+                log_print(f"[*] INTS Connected! Current latest stamp: {latest_stamp}")
                 return
 
             for sms in reversed(sms_list):
@@ -165,18 +171,18 @@ def fetch_new_sms():
                         f"💬 **SMS Text:**\n`{message}`"
                     )
                     send_telegram_message(alert_text)
-                    log_print(f"[+] OTP Forwarded to Telegram!")
+                    log_print(f"[+] OTP Forwarded to Telegram! (Stamp: {current_stamp})")
                     latest_stamp = current_stamp
         else:
-            log_print(f"[!] Server HTTP Response: {response.status_code}")
+            log_print(f"[!] Server Response Code: {response.status_code}")
     except Exception as e:
-        log_print(f"[-] Connection Error: {e}")
+        log_print(f"[-] Connection Exception: {e}")
 
 def main_loop():
     login_to_panel()
     while True:
         fetch_new_sms()
-        time.sleep(60)
+        time.sleep(20) # প্রতি ২০ সেকেন্ড পর পর চেক করবে
 
 if __name__ == "__main__":
     t = threading.Thread(target=main_loop, daemon=True)
